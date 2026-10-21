@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SpaceRack — AI pods in orbit</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400&display=swap"
+    />
+    <link rel="stylesheet" href="hark.css" />
+    <link rel="stylesheet" href="hark-hero.css" />
+    <style>
+      :root {
+        --x-cyan: #4fe3e0;
+        --x-cyan-soft: #4fe3e033;
+        --x-ink: #f5f5f7;
+        --x-mut: #9aa6b2;
+        --x-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        --x-glass: rgb(10 16 24 / 0.55);
+        --x-edge: rgb(245 245 247 / 0.14);
+      }
+      html { background: #000; overflow-x: hidden; overflow-x: clip; }
+      body {
+        background: #000;
+        color: var(--x-ink);
+        overflow-x: hidden;
+        overflow-x: clip;
+      }
+      /* photoreal stage: fixed layers that crossfade with scroll */
+      .x-stage { position: fixed; inset: 0; z-index: 0; overflow: hidden; background: #000; }
+      .x-layer { position: absolute; inset: 0; opacity: 0; will-change: opacity; }
+      .x-layer[data-layer="hero"] { opacity: 1; }
+      .x-par, .x-zoom, .x-kb { position: absolute; inset: 0; will-change: transform; }
+      .x-par { inset: -4%; }
+      .x-layer img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center; display: block; }
+      .x-layer canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+      .x-kb { animation: x-kenburns 25s ease-in-out infinite alternate; transform-origin: 62% 42%; }
+      @keyframes x-kenburns { from { transform: scale(1); } to { transform: scale(1.12); } }
+
+      /* sun glint near the hero's sun; position set by JS */
+      .x-glint {
+        position: absolute; left: 89%; top: 14%; width: 46vmax; height: 46vmax;
+        transform: translate(-50%, -50%); pointer-events: none; mix-blend-mode: screen;
+        background: radial-gradient(circle, rgb(255 248 228 / 0.85) 0%, rgb(255 226 170 / 0.32) 12%, rgb(255 200 140 / 0.1) 30%, transparent 60%);
+        animation: x-glint 6s ease-in-out infinite;
+      }
+      .x-glint::after {
+        content: ""; position: absolute; left: 50%; top: 50%; width: 140%; height: 2px;
+        transform: translate(-50%, -50%) rotate(-18deg);
+        background: linear-gradient(90deg, transparent, rgb(255 246 222 / 0.55), transparent);
+        filter: blur(1px);
+      }
+      @keyframes x-glint { 0%, 100% { opacity: 0.55; transform: translate(-50%, -50%) scale(0.92); } 50% { opacity: 1; transform: translate(-50%, -50%) scale(1.06); } }
+
+      /* solar shimmer sweep */
+      .x-shimmer { position: absolute; inset: 0; overflow: hidden; mix-blend-mode: screen; pointer-events: none; }
+      .x-shimmer::before {
+        content: ""; position: absolute; top: -20%; bottom: -20%; left: -40%; width: 35%;
+        background: linear-gradient(100deg, transparent 0%, rgb(190 230 255 / 0.0) 20%, rgb(220 240 255 / 0.28) 50%, rgb(190 230 255 / 0) 80%, transparent 100%);
+        transform: skewX(-18deg) translateX(0);
+        animation: x-sweep 7s cubic-bezier(.5, 0, .3, 1) infinite;
+      }
+      @keyframes x-sweep { 0% { transform: skewX(-18deg) translateX(0); } 45%, 100% { transform: skewX(-18deg) translateX(520%); } }
+
+      /* teal rack glow */
+      .x-teal {
+        position: absolute; inset: 0; mix-blend-mode: screen; pointer-events: none;
+        background: radial-gradient(60% 55% at 50% 55%, rgb(79 227 224 / 0.22), transparent 70%), linear-gradient(to top, rgb(79 227 224 / 0.08), transparent 50%);
+        animation: x-pulse 4.5s ease-in-out infinite;
+      }
+      @keyframes x-pulse { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+
+      /* stage-wide scrim, film grain and vignette */
+      .x-scrim { position: absolute; inset: 0; background: #000; opacity: 0; pointer-events: none; }
+      .x-vignette { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(120% 90% at 50% 50%, transparent 55%, rgb(0 0 0 / 0.7) 100%); }
+      .x-grain {
+        position: absolute; inset: -50%; pointer-events: none; opacity: 0.09; mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix type='saturate' values='0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+        animation: x-grain 0.9s steps(6) infinite;
+      }
+      @keyframes x-grain {
+        0% { transform: translate(0, 0); } 20% { transform: translate(-3%, 2%); } 40% { transform: translate(2%, -3%); }
+        60% { transform: translate(-2%, -1%); } 80% { transform: translate(3%, 3%); } 100% { transform: translate(0, 0); }
+      }
+
+      /* headline letter reveal */
+      .x-h1 .x-ch { display: inline-block; }
+      .js .x-h1 .x-ch { opacity: 0; transform: translateY(0.5em); filter: blur(8px); animation: x-ch 900ms var(--ease-out) forwards; animation-delay: calc(300ms + var(--i) * 70ms); }
+      @keyframes x-ch { to { opacity: 1; transform: none; filter: none; } }
+
+      @media (prefers-reduced-motion: reduce) {
+        .x-kb, .x-glint, .x-shimmer::before, .x-teal, .x-grain { animation: none; }
+        .js .x-h1 .x-ch { animation: none; opacity: 1; transform: none; filter: none; }
+      }
+      .x-wrap { position: relative; z-index: 2; max-width: var(--page-max); margin: 0 auto; padding-inline: var(--gutter); }
+
+      /* nav */
+      .x-nav {
+        position: fixed;
+        top: 0; left: 0; right: 0;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 14px clamp(16px, 3vw, 32px);
+        background: linear-gradient(to bottom, rgb(0 0 0 / 0.72), transparent);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+      }
+      .x-logo { font: var(--weight-bold) 15px/1 var(--sans); letter-spacing: 0.22em; color: var(--x-ink); text-decoration: none; display: inline-flex; align-items: center; min-height: var(--tap); }
+      .x-nav nav { display: flex; gap: 4px; }
+      .x-nav nav a {
+        display: inline-flex; align-items: center;
+        min-height: var(--tap); padding: 0 12px;
+        font: var(--weight-regular) var(--size-caption)/1 var(--x-mono);
+        letter-spacing: 0.14em; text-transform: uppercase;
+        color: var(--x-mut); text-decoration: none; border-radius: var(--r-s);
+      }
+      .x-nav nav a:hover { color: var(--x-cyan); }
+      @media (max-width: 599px) { .x-nav nav a { padding: 0 8px; letter-spacing: 0.08em; } }
+
+      /* type */
+      .x-eyebrow {
+        font: var(--weight-regular) var(--size-caption)/1.4 var(--x-mono);
+        letter-spacing: 0.26em; text-transform: uppercase; color: var(--x-cyan);
+      }
+      .x-h1 { font: var(--weight-bold) clamp(48px, 13vw, 140px)/0.92 var(--sans); letter-spacing: -0.03em; margin: 14px 0 0; }
+      .x-h2 { font: var(--weight-bold) clamp(28px, 4.4vw, 52px)/1.05 var(--sans); letter-spacing: -0.02em; margin: 10px 0 0; }
+      .x-lede { font: var(--weight-medium) clamp(17px, 2vw, 22px)/1.45 var(--sans); color: var(--x-ink); max-width: 30ch; margin-top: 18px; }
+      .x-body { font-size: var(--size-prose); line-height: 1.55; color: var(--x-mut); max-width: 56ch; margin-top: 16px; }
+      .x-fine { font: var(--weight-regular) var(--size-caption)/1.5 var(--x-mono); color: #8a95a1; margin-top: 20px; max-width: 60ch; }
+      .x-mono-list { list-style: none; margin: 22px 0 0; padding: 0; display: grid; gap: 10px; }
+      .x-mono-list li {
+        font: var(--weight-regular) var(--size-meta)/1.4 var(--x-mono);
+        color: var(--x-mut); padding-left: 18px; position: relative;
+      }
+      .x-mono-list li::before { content: ""; position: absolute; left: 0; top: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--x-cyan); }
+
+      /* buttons */
+      .x-btns { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 28px; }
+      .x-btn {
+        display: inline-flex; align-items: center; min-height: var(--tap);
+        padding: 0 22px; border-radius: var(--r-pill);
+        font: var(--weight-medium) var(--size-small)/1 var(--sans);
+        text-decoration: none; border: 1px solid var(--x-cyan);
+        color: #001517; background: var(--x-cyan);
+        transition: transform var(--dur-quick) var(--ease-out), box-shadow var(--dur-quick) var(--ease-out);
+      }
+      .x-btn:hover { box-shadow: 0 0 28px var(--x-cyan-soft); transform: translateY(-1px); }
+      .x-btn--ghost { background: transparent; color: var(--x-ink); border-color: var(--x-edge); }
+      .x-btn--ghost:hover { border-color: var(--x-cyan); color: var(--x-cyan); }
+
+      /* sections */
+      .x-sec { position: relative; min-height: 86vh; display: flex; align-items: center; padding-block: clamp(72px, 12vh, 140px); scroll-margin-top: 80px; }
+      .x-hero { min-height: 100svh; }
+      .x-hero::before { content: ""; position: absolute; top: 0; bottom: 0; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: -1; pointer-events: none; background: linear-gradient(90deg, rgb(0 0 0 / 0.72) 0%, rgb(0 0 0 / 0.35) 45%, transparent 75%); }
+      /* sticky scenes: the section is tall, its inner frame pins for a full viewport */
+      .x-scene { display: block; min-height: 0; height: 190vh; padding-block: 0; }
+      .x-stick {
+        position: sticky; top: 0; height: 100vh; height: 100svh;
+        display: flex; align-items: center; padding-block: 88px 40px;
+      }
+      .x-stick::before {
+        content: ""; position: absolute; top: 0; bottom: 0; left: calc(50% - 50vw); right: calc(50% - 50vw); z-index: -1; pointer-events: none;
+        background: linear-gradient(90deg, rgb(0 0 0 / 0.75) 0%, rgb(0 0 0 / 0.35) 45%, transparent 72%);
+      }
+      .x-stick--right::before { background: linear-gradient(270deg, rgb(0 0 0 / 0.75) 0%, rgb(0 0 0 / 0.35) 45%, transparent 72%); }
+      .x-stick--center::before { background: radial-gradient(70% 70% at 50% 50%, rgb(0 0 0 / 0.65), transparent 80%); }
+      @media (max-width: 760px) {
+        .x-scene { height: 170vh; }
+        .x-stick { align-items: flex-end; padding-bottom: 28px; }
+        .x-stick::before, .x-stick--right::before, .x-hero::before { background: linear-gradient(0deg, rgb(0 0 0 / 0.85) 0%, rgb(0 0 0 / 0.5) 50%, transparent 85%); }
+      }
+      .x-panel {
+        background: var(--x-glass);
+        -webkit-backdrop-filter: blur(18px) saturate(1.4);
+        backdrop-filter: blur(18px) saturate(1.4);
+        border: 1px solid var(--x-edge);
+        border-radius: var(--r-l);
+        padding: clamp(24px, 3.4vw, 44px);
+        max-width: 640px;
+      }
+      .x-panel--right { margin-left: auto; }
+      .x-panel--wide { max-width: 860px; }
+      .x-panel--center { margin-inline: auto; text-align: center; }
+      .x-panel--center .x-body, .x-panel--center .x-lede, .x-panel--center .x-fine { margin-inline: auto; }
+      .x-panel--center .x-btns { justify-content: center; }
+      .x-hero .x-panel { background: none; border: 0; backdrop-filter: none; -webkit-backdrop-filter: none; padding-inline: 0; max-width: 760px; }
+
+      /* reveal */
+      .js .x-reveal { opacity: 0; transform: translateY(26px); transition: opacity 900ms var(--ease-out), transform 900ms var(--ease-out); }
+      .js .x-stick .x-reveal { transform: translateX(-48px); }
+      .js .x-stick .x-panel--right.x-reveal { transform: translateY(36px); }
+      @media (min-width: 1100px) { .js .x-stick .x-panel--right.x-reveal { transform: translateX(48px); } }
+      .js .x-stick .x-panel--center.x-reveal, .js .x-stick .x-panel--wide.x-reveal { transform: translateY(36px) scale(0.98); }
+      .js .x-reveal.is-in { opacity: 1; transform: none; }
+      @media (prefers-reduced-motion: reduce) { .js .x-reveal { opacity: 1; transform: none; transition: none; } }
+
+      /* gauge */
+      .x-gauge { display: grid; place-items: center; margin-top: 28px; }
+      .x-gauge svg { width: clamp(180px, 26vw, 240px); height: auto; transform: rotate(-90deg); }
+      .x-gauge__track { fill: none; stroke: rgb(245 245 247 / 0.12); stroke-width: 6; }
+      .x-gauge__arc { fill: none; stroke: var(--x-cyan); stroke-width: 6; stroke-linecap: round; stroke-dasharray: 534; stroke-dashoffset: 534; filter: drop-shadow(0 0 10px var(--x-cyan-soft)); }
+      .is-in .x-gauge__arc { stroke-dashoffset: 267; transition: stroke-dashoffset 1800ms var(--ease-out); }
+      .x-gauge__fig { position: absolute; font: var(--weight-bold) clamp(40px, 6vw, 64px)/1 var(--sans); letter-spacing: -0.03em; }
+      .x-gauge-wrap { position: relative; display: grid; place-items: center; }
+      @media (prefers-reduced-motion: reduce) { .x-gauge__arc { stroke-dashoffset: 267; transition: none; } }
+
+      /* counter */
+      .x-count { font: var(--weight-bold) clamp(56px, 12vw, 132px)/0.95 var(--sans); letter-spacing: -0.04em; font-variant-numeric: tabular-nums; margin-top: 10px; }
+      .x-count span { color: var(--x-cyan); }
+
+      /* steps */
+      .x-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-top: 32px; }
+      .x-step {
+        background: var(--x-glass); border: 1px solid var(--x-edge); border-radius: var(--r-m);
+        padding: 22px 20px; -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      }
+      .x-step b { display: block; font: var(--weight-regular) var(--size-caption)/1 var(--x-mono); letter-spacing: 0.2em; color: var(--x-cyan); }
+      .x-step h3 { margin-top: 14px; font: var(--weight-medium) var(--size-heading)/1.2 var(--sans); }
+      .x-step p { margin-top: 8px; font-size: var(--size-small); color: var(--x-mut); line-height: 1.5; }
+      @media (max-width: 860px) { .x-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 480px) { .x-steps { grid-template-columns: 1fr; } }
+
+      /* specs row */
+      .x-specs { display: flex; flex-wrap: wrap; gap: 10px 28px; margin-top: 26px; padding-top: 20px; border-top: 1px solid var(--x-edge); }
+      .x-specs div { font: var(--weight-regular) var(--size-caption)/1.5 var(--x-mono); letter-spacing: 0.12em; text-transform: uppercase; color: #8a95a1; }
+      .x-specs b { display: block; font: var(--weight-medium) var(--size-heading)/1.2 var(--sans); letter-spacing: 0; text-transform: none; color: var(--x-ink); }
+
+      /* footer */
+      .x-foot {
+        position: relative; z-index: 2;
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 14px;
+        max-width: var(--page-max); margin: 0 auto;
+        padding: 28px clamp(16px, 3vw, 32px) 40px;
+        border-top: 1px solid var(--x-edge);
+        font: var(--weight-regular) var(--size-caption)/1.5 var(--x-mono); color: #8a95a1;
+      }
+      .x-foot a { color: #8a95a1; text-decoration: none; display: inline-flex; align-items: center; min-height: var(--tap); min-width: var(--tap); }
+      .x-foot a:hover { color: var(--x-cyan); }
+      :focus-visible { outline: 2px solid var(--x-cyan); outline-offset: 3px; }
+    </style>
+  </head>
+  <body>
+    <div class="x-stage" aria-hidden="true">
+      <div class="x-layer" data-layer="hero">
+        <div class="x-par"><div class="x-zoom"><div class="x-kb">
+          <img src="hero_pod.png" alt="" fetchpriority="high" />
+          <div class="x-glint"></div>
+        </div></div></div>
+        <canvas id="x-stars"></canvas>
+      </div>
+      <div class="x-layer" data-layer="interior">
+        <div class="x-par"><div class="x-zoom">
+          <img src="interior.png" alt="" loading="lazy" />
+          <div class="x-teal"></div>
+        </div></div>
+      </div>
+      <div class="x-layer" data-layer="solar">
+        <div class="x-par"><div class="x-zoom">
+          <img src="solar_wing.png" alt="" loading="lazy" />
+          <div class="x-shimmer"></div>
+        </div></div>
+      </div>
+      <div class="x-layer" data-layer="cooling">
+        <div class="x-par"><div class="x-zoom">
+          <img src="cooling.png" alt="" loading="lazy" />
+        </div></div>
+        <canvas id="x-vapor"></canvas>
+      </div>
+      <div class="x-layer" data-layer="fleet">
+        <div class="x-par"><div class="x-zoom">
+          <img src="fleet.png" alt="" loading="lazy" />
+        </div></div>
+      </div>
+      <div class="x-scrim"></div>
+      <div class="x-vignette"></div>
+      <div class="x-grain"></div>
+    </div>
+
+    <header class="x-nav">
+      <a class="x-logo" href="#top">SPACERACK</a>
+      <nav aria-label="Sections">
+        <a href="#power">Power</a>
+        <a href="#cooling">Cooling</a>
+        <a href="#scale">Scale</a>
+        <a href="#contact">Contact</a>
+      </nav>
+    </header>
+
+    <main class="x-wrap" id="top">
+      <section class="x-sec x-hero" id="hero" data-scene="hero" data-dim="0">
+        <div class="x-panel x-reveal">
+          <p class="x-eyebrow">Orbital compute · spacerack.si</p>
+          <h1 class="x-h1" aria-label="SPACERACK"><span aria-hidden="true"><span class="x-ch" style="--i:0">S</span><span class="x-ch" style="--i:1">P</span><span class="x-ch" style="--i:2">A</span><span class="x-ch" style="--i:3">C</span><span class="x-ch" style="--i:4">E</span><span class="x-ch" style="--i:5">R</span><span class="x-ch" style="--i:6">A</span><span class="x-ch" style="--i:7">C</span><span class="x-ch" style="--i:8">K</span></span></h1>
+          <p class="x-lede">The world's first startup launching entire AI pods into orbit.</p>
+          <p class="x-body">Container-scale AI factories, powered by the Sun, cooled by space.</p>
+          <div class="x-btns">
+            <a class="x-btn" href="mailto:hello@spacerack.si">Partner with us</a>
+            <a class="x-btn x-btn--ghost" href="#moment">See the pod</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="x-sec x-scene" id="moment" data-scene="interior" data-dim="0.1">
+        <div class="x-stick">
+        <div class="x-panel x-reveal">
+          <p class="x-eyebrow">The moment</p>
+          <h2 class="x-h2">We take that idea off the planet.</h2>
+          <p class="x-body">
+            Today NVIDIA introduced DSX POD — a complete AI factory inside a modular container:
+            seven liquid-cooled Vera Rubin racks, deployable in 14 days instead of six months.
+          </p>
+          <div class="x-specs">
+            <div>Form factor<b>40-ft container</b></div>
+            <div>Racks<b>Seven, liquid-cooled</b></div>
+            <div>Deploy<b>14 days</b></div>
+          </div>
+          <p class="x-fine">NVIDIA, DSX POD and Vera Rubin are trademarks of NVIDIA Corporation. SpaceRack is independent.</p>
+        </div>
+        </div>
+      </section>
+
+      <section class="x-sec x-scene" id="power" data-scene="solar" data-dim="0">
+        <div class="x-stick x-stick--right">
+        <div class="x-panel x-panel--right x-reveal">
+          <p class="x-eyebrow">01 · Giant solar wings</p>
+          <h2 class="x-h2">Power straight from the source.</h2>
+          <p class="x-body">
+            Huge deployable solar arrays extend from both long sides of every pod. Continuous power
+            from the Sun — no grid interconnect, no substation queue, no land.
+          </p>
+          <ul class="x-mono-list">
+            <li>Two wings per pod, four panels each</li>
+            <li>Unfold in orbit, minutes after separation</li>
+            <li>No grid. No land. No neighbours.</li>
+          </ul>
+        </div>
+        </div>
+      </section>
+
+      <section class="x-sec x-scene" id="half" data-scene="solar" data-dim="0.45">
+        <div class="x-stick">
+        <div class="x-panel x-reveal">
+          <p class="x-eyebrow">02 · Half-power by design</p>
+          <h2 class="x-h2">Every pod runs at 50% power.</h2>
+          <p class="x-body">
+            Less heat to reject, lower energy draw per rack, and far longer hardware life. Headroom
+            is a feature, not waste.
+          </p>
+          <div class="x-gauge x-gauge-wrap">
+            <svg viewBox="0 0 200 200" role="img" aria-label="Ring gauge filled to 50 percent">
+              <circle class="x-gauge__track" cx="100" cy="100" r="85" />
+              <circle class="x-gauge__arc" cx="100" cy="100" r="85" />
+            </svg>
+            <p class="x-gauge__fig">50%</p>
+          </div>
+        </div>
+        </div>
+      </section>
+
+      <section class="x-sec x-scene" id="cooling" data-scene="cooling" data-dim="0.05">
+        <div class="x-stick x-stick--right">
+        <div class="x-panel x-panel--right x-reveal">
+          <p class="x-eyebrow">03 · Evaporative cooling chamber</p>
+          <h2 class="x-h2">Heat goes to deep space.</h2>
+          <p class="x-body">
+            A dedicated evaporation chamber, engineered for vacuum, carries heat away from the racks
+            and rejects it to deep space through the radiator fin array on the pod's roof.
+          </p>
+          <ul class="x-mono-list">
+            <li>Evaporation chamber coupled to every rack loop</li>
+            <li>Radiator fins face away from the Sun</li>
+            <li>No water towers, no chillers, no coolant drawn from Earth</li>
+          </ul>
+        </div>
+        </div>
+      </section>
+
+      <section class="x-sec x-scene" id="scale" data-scene="fleet" data-dim="0.1">
+        <div class="x-stick x-stick--center">
+        <div class="x-panel x-panel--wide x-panel--center x-reveal">
+          <p class="x-eyebrow">04 · Scale</p>
+          <p class="x-count" data-count="1000">0</p>
+          <h2 class="x-h2">pods per year.</h2>
+          <p class="x-body">We are ready to launch one thousand pods a year.</p>
+        </div>
+        </div>
+      </section>
+
+      <section class="x-sec" id="how" data-scene="fleet" data-dim="0.6">
+        <div class="x-reveal" style="width: 100%">
+          <p class="x-eyebrow">How it works</p>
+          <h2 class="x-h2">Four steps, Earth to orbit.</h2>
+          <div class="x-steps">
+            <article class="x-step"><b>01</b><h3>Build on Earth</h3><p>Racks, power and cooling integrated inside one sealed container.</p></article>
+            <article class="x-step"><b>02</b><h3>Launch as one unit</h3><p>The pod flies whole, wings folded flat against its sides.</p></article>
+            <article class="x-step"><b>03</b><h3>Unfold solar wings</h3><p>Both arrays deploy panel by panel and lock to the Sun.</p></article>
+            <article class="x-step"><b>04</b><h3>Compute in orbit</h3><p>The pod joins the fleet and starts taking workloads.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="x-sec" id="contact" data-scene="fleet" data-dim="0.7">
+        <div class="x-panel x-panel--center x-reveal">
+          <p class="x-eyebrow">Contact</p>
+          <h2 class="x-h2">Compute beyond the planet.</h2>
+          <p class="x-body">Operators, launch partners and investors: we are talking to all three.</p>
+          <div class="x-btns"><a class="x-btn" href="mailto:hello@spacerack.si">Contact SpaceRack</a></div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="x-foot">
+      <p>© 2026 SpaceRack · <a href="https://spacerack.si" target="_blank" rel="noopener">spacerack.si</a></p>
+      <p><a href="mailto:hello@spacerack.si">hello@spacerack.si</a></p>
+    </footer>
+
+    <script src="hark.js"></script>
+    <script>
+      (function () {
+        document.documentElement.classList.add("js");
+        var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var io = new IntersectionObserver(function (es) {
+          es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add("is-in"); io.unobserve(e.target); } });
+        }, { threshold: 0.25 });
+        document.querySelectorAll(".x-reveal").forEach(function (el) { io.observe(el); });
+
+        var cEl = document.querySelector("[data-count]");
+        var cIo = new IntersectionObserver(function (es) {
+          es.forEach(function (e) {
+            if (!e.isIntersecting) return;
+            cIo.disconnect();
+            var target = +cEl.getAttribute("data-count"), t0 = performance.now(), dur = 1600;
+            if (reduce) { cEl.innerHTML = "1,<span>000</span>"; return; }
+            (function tick(t) {
+              var k = Math.min(1, (t - t0) / dur), v = Math.round(target * (1 - Math.pow(1 - k, 3)));
+              cEl.textContent = v.toLocaleString("en-US");
+              if (k < 1) requestAnimationFrame(tick); else cEl.innerHTML = "1,<span>000</span>";
+            })(t0);
+          });
+        }, { threshold: 0.4 });
+        if (cEl) cIo.observe(cEl);
+      })();
+    </script>
+
+    <script>
+      (function () {
+        var reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var IW = 1376, IH = 768, SUN = [0.89, 0.14];
+        var clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
+        var dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+        // layers and the sections that drive them
+        var layers = {}, order = [];
+        document.querySelectorAll(".x-layer").forEach(function (el, i) {
+          var L = { el: el, zoom: el.querySelector(".x-zoom"), par: el.querySelector(".x-par"), secs: [], op: -1, dir: i % 2 ? -1 : 1 };
+          layers[el.getAttribute("data-layer")] = L; order.push(L);
+        });
+        var secs = [].slice.call(document.querySelectorAll("[data-scene]"));
+        secs.forEach(function (s) { var L = layers[s.getAttribute("data-scene")]; if (L) L.secs.push(s); });
+        var scrim = document.querySelector(".x-scrim");
+        var glint = document.querySelector(".x-glint");
+
+        // canvases
+        var starC = document.getElementById("x-stars"), starX = starC.getContext("2d");
+        var vapC = document.getElementById("x-vapor"), vapX = vapC.getContext("2d");
+        var W = 0, H = 0, stars = [], vapor = [];
+        function sizeCanvas(c, x) {
+          c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+          x.setTransform(dpr, 0, 0, dpr, 0, 0);
+        }
+        function makeStars() {
+          var n = Math.round(clamp(W * H / 9000, 70, 220));
+          stars = [];
+          for (var i = 0; i < n; i++) {
+            stars.push({ x: Math.random() * W, y: Math.random() * H, r: 0.3 + Math.pow(Math.random(), 3) * 1.4,
+              vx: -(0.6 + Math.random() * 2.4), vy: (Math.random() - 0.5) * 0.8,
+              ph: Math.random() * 6.28, sp: 0.6 + Math.random() * 2.2 });
+          }
+        }
+        // soft vapor sprite
+        var puff = document.createElement("canvas"); puff.width = puff.height = 128;
+        (function () {
+          var g = puff.getContext("2d"), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+          gr.addColorStop(0, "rgba(225,245,255,0.55)"); gr.addColorStop(0.45, "rgba(200,235,250,0.18)"); gr.addColorStop(1, "rgba(200,235,250,0)");
+          g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+        })();
+        function spawnVapor(p, fresh) {
+          var crystal = Math.random() < 0.62;
+          p.c = crystal;
+          p.x = Math.random() * W;
+          p.y = fresh ? Math.random() * H : H + 40;
+          p.r = crystal ? 0.6 + Math.random() * 1.6 : 40 + Math.random() * 110;
+          p.vy = -(crystal ? 6 + Math.random() * 18 : 4 + Math.random() * 10);
+          p.vx = (Math.random() - 0.3) * (crystal ? 10 : 6);
+          p.a = crystal ? 0.5 + Math.random() * 0.5 : 0.08 + Math.random() * 0.14;
+          p.ph = Math.random() * 6.28; p.sw = 0.3 + Math.random() * 0.9;
+          return p;
+        }
+        function makeVapor() {
+          var n = Math.round(clamp(W * H / 14000, 50, 140));
+          vapor = [];
+          for (var i = 0; i < n; i++) vapor.push(spawnVapor({}, true));
+        }
+        function placeGlint() {
+          var pw = W * 1.08, ph = H * 1.08, s = Math.max(pw / IW, ph / IH), dw = IW * s, dh = IH * s;
+          glint.style.left = ((pw - dw) / 2 + SUN[0] * dw) + "px";
+          glint.style.top = ((ph - dh) / 2 + SUN[1] * dh) + "px";
+        }
+        function resize() {
+          W = innerWidth; H = innerHeight;
+          sizeCanvas(starC, starX); sizeCanvas(vapC, vapX);
+          makeStars(); makeVapor(); placeGlint();
+          if (reduce) { drawStars(0, 0); drawVapor(0, 0); }
+        }
+
+        function drawStars(t, dt) {
+          starX.clearRect(0, 0, W, H);
+          for (var i = 0; i < stars.length; i++) {
+            var s = stars[i];
+            if (dt) {
+              s.x += s.vx * dt; s.y += s.vy * dt;
+              if (s.x < -4) s.x = W + 4; if (s.y < -4) s.y = H + 4; if (s.y > H + 4) s.y = -4;
+            }
+            var a = reduce ? 0.7 : 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * s.sp + s.ph));
+            if (s.r > 1.1) {
+              starX.fillStyle = "rgba(200,225,255," + (a * 0.18) + ")";
+              starX.beginPath(); starX.arc(s.x, s.y, s.r * 3.2, 0, 6.283); starX.fill();
+            }
+            starX.fillStyle = "rgba(255,255,255," + a + ")";
+            starX.beginPath(); starX.arc(s.x, s.y, s.r, 0, 6.283); starX.fill();
+          }
+        }
+        function drawVapor(t, dt) {
+          vapX.clearRect(0, 0, W, H);
+          for (var i = 0; i < vapor.length; i++) {
+            var p = vapor[i];
+            if (dt) {
+              p.x += (p.vx + Math.sin(t * p.sw + p.ph) * 8) * dt; p.y += p.vy * dt;
+              if (p.y < -p.r * 1.2 || p.x < -p.r * 1.5 || p.x > W + p.r * 1.5) spawnVapor(p, false);
+            }
+            if (p.c) {
+              var tw = reduce ? 0.7 : 0.4 + 0.6 * Math.abs(Math.sin(t * 2.2 + p.ph));
+              vapX.fillStyle = "rgba(220,250,255," + (p.a * tw) + ")";
+              vapX.beginPath(); vapX.arc(p.x, p.y, p.r, 0, 6.283); vapX.fill();
+            } else {
+              vapX.globalAlpha = p.a;
+              vapX.drawImage(puff, p.x - p.r, p.y - p.r, p.r * 2, p.r * 2);
+              vapX.globalAlpha = 1;
+            }
+          }
+        }
+
+        // pointer, touch and gyro parallax
+        var tx = 0, ty = 0, mx = 0, my = 0;
+        addEventListener("pointermove", function (e) { tx = e.clientX / innerWidth - 0.5; ty = e.clientY / innerHeight - 0.5; }, { passive: true });
+        addEventListener("touchmove", function (e) {
+          var t = e.touches[0]; if (!t) return;
+          tx = t.clientX / innerWidth - 0.5; ty = t.clientY / innerHeight - 0.5;
+        }, { passive: true });
+        addEventListener("deviceorientation", function (e) {
+          if (e.gamma == null) return;
+          tx = clamp(e.gamma / 30, -1, 1) * 0.5; ty = clamp((e.beta - 45) / 30, -1, 1) * 0.5;
+        });
+        if (window.DeviceOrientationEvent && typeof DeviceOrientationEvent.requestPermission === "function") {
+          addEventListener("touchend", function ask() {
+            removeEventListener("touchend", ask);
+            DeviceOrientationEvent.requestPermission().catch(function () {});
+          });
+        }
+
+        // scroll: crossfade weights, dim and scroll-linked zoom
+        function update() {
+          var c = H / 2, F = H * 0.45, dim = 0, i, k;
+          var w = {};
+          for (i = 0; i < secs.length; i++) {
+            var r = secs[i].getBoundingClientRect();
+            var v = clamp((c - r.top) / F + 0.5, 0, 1) * clamp((r.bottom - c) / F + 0.5, 0, 1);
+            if (i === 0 && r.top >= 0) v = 1;
+            var key = secs[i].getAttribute("data-scene");
+            w[key] = (w[key] || 0) + v;
+            dim += v * parseFloat(secs[i].getAttribute("data-dim") || 0);
+          }
+          scrim.style.opacity = clamp(dim, 0, 0.85).toFixed(3);
+          for (k in layers) {
+            var L = layers[k], op = clamp(w[k] || 0, 0, 1);
+            if (Math.abs(op - L.op) > 0.001) {
+              L.el.style.opacity = op.toFixed(3);
+              L.el.style.visibility = op > 0.001 ? "visible" : "hidden";
+              L.op = op;
+            }
+            if (op > 0.001 && L.secs.length && !reduce) {
+              var top = L.secs[0].getBoundingClientRect().top, bot = L.secs[L.secs.length - 1].getBoundingClientRect().bottom;
+              var p = clamp((H - top) / (bot - top + H), 0, 1);
+              var sc = 1 + 0.15 * p, dx = (p - 0.5) * -3 * L.dir, dy = (p - 0.5) * -2;
+              L.zoom.style.transform = "translate3d(" + dx.toFixed(2) + "%," + dy.toFixed(2) + "%,0) scale(" + sc.toFixed(4) + ")";
+            }
+          }
+          return w;
+        }
+
+        resize();
+        addEventListener("resize", resize);
+        var w = update();
+
+        if (reduce) {
+          addEventListener("scroll", update, { passive: true });
+          return;
+        }
+
+        var last = performance.now();
+        function frame(now) {
+          var dt = Math.min(0.05, (now - last) / 1000), t = now / 1000; last = now;
+          w = update();
+          mx += (tx - mx) * 0.05; my += (ty - my) * 0.05;
+          var pt = "translate3d(" + (-mx * 3).toFixed(3) + "%," + (-my * 3).toFixed(3) + "%,0)";
+          for (var i = 0; i < order.length; i++) if (order[i].op > 0.001) order[i].par.style.transform = pt;
+          if ((w.hero || 0) > 0.001) {
+            starC.style.transform = "translate3d(" + (-mx * 18).toFixed(2) + "px," + (-my * 18).toFixed(2) + "px,0)";
+            drawStars(t, dt);
+          }
+          if ((w.cooling || 0) > 0.001) drawVapor(t, dt);
+          requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+      })();
+    </script>
+  </body>
+</html>
